@@ -1,0 +1,130 @@
+#!/usr/bin/perl
+#
+# $Id: perg,v 1.3 1995/12/18 23:22:12 kehr Exp kehr $
+#
+
+use Getopt::Std;
+
+#$debug = 1;
+
+$opt_p=".";
+$opt_f=".*";
+
+# parse for -p <path> -f <wildcard-mask> -n
+getopt( "f:p:nhd" );
+
+$debug = $opt_d;
+
+# some debug-output
+print STDERR "-h: '$opt_h'\n" if $debug;
+print STDERR "-d: '$opt_d'\n" if $debug;
+print STDERR "-n: '$opt_n'\n" if $debug;
+print STDERR "-f: '$opt_f'\n" if $debug;
+print STDERR "-p: '$opt_p'\n" if $debug;
+print STDERR "\@ARGV:  @ARGV\n"  if $debug;
+print STDERR "\@ARGV[0]:  @ARGV[0]\n"  if $debug;
+print STDERR "\$#ARGV: $#ARGV\n" if $debug;
+
+$numArgs = $#ARGV;          # save number of Commandline-Arguments
+if ( $numArgs eq 0 )        # only one argument
+{
+    $regexp = $ARGV[0];     # suggest its the regular expression
+}
+
+print STDERR "\$regexp: $regexp\n" if $debug;
+
+$path=$opt_p;
+
+$fmask=$opt_f;
+$fmask=~ s#\(#\\(#g; # protect "("
+$fmask=~ s#\)#\\)#g; # protect ")"
+$fmask=~ s#\|#\\|#g; # protect "|"
+
+$progname=`basename $0`;
+chop($progname);
+
+# no arguments or -h specified
+if ( $numArgs lt 0 || $opt_h )
+{
+    printf STDERR "\nusage: \t$progname\t[-f <file-mask>] [-p <path>] [-n] <regexp>\n";
+    print STDERR <<EOMSG;
+
+        -h : shows this helptext
+        -f : searches in files matching regexp <file-mask>
+        -p : start searching in <path>
+	-n : print line numbers
+
+   This program does a `find' starting in directory <path> which finds
+   all files matching regexp <file-mask>. All files (except directories,
+   binaries, sockets and pipes) will be searched for <regexp>.
+   If -n was specified matching lines will be printed with their line-numbers.
+
+   PERG is the opposite of GREP and means "PERsonal Grep".
+
+EOMSG
+    exit( 1 );
+}
+
+$find_cmd="find $path -print | egrep '$fmask'";
+print STDERR "Find-Cmd: $find_cmd\n" if $debug;
+
+open(FILES, "$find_cmd |") || die "something is wrong with the command `$find_cmd'. Giving up !";
+
+$prog = <<EOPROG;
+
+while (<FILES>)
+{
+    chop;
+    \$file=\$_;
+    \$print_file=\$file;
+    \$print_file =~ s#^\.\/##g;
+    print STDERR "File: `\$file'\n" if \$debug;
+    open(FILE,\$file) || do { print STDERR "can't open \$file: \$!\n";
+			      next;
+			  };
+    next if -d \$file; # ignore directories
+    next if -B \$file; # ignore binaries
+    next if -p \$file; # ignore pipes
+    next if -S \$file; # ignore sockets
+
+    \$header_printed="";
+    \$lineno=0;
+    while (<FILE>) {
+	\$lineno++;
+	if (grep (/\$regexp/io,\$_)) {
+	    if ( !\$header_printed ) {
+		print STDOUT "\$print_file:\n";
+		\$header_printed=1;
+	    }
+	    if ( \$opt_n )
+		{ print STDOUT "  \$lineno: \$_"; }
+	    else
+		{ print STDOUT "  \$_"; };
+	}
+    };
+    close(FILE);
+}
+EOPROG
+
+print STDERR $prog if $debug;
+
+# now evaluate - so errors in the regexp will not fail immediately
+eval $prog;
+# now show errormessage: usually wrong regular-expression
+die "$0: wrong regexp `$regexp'" if $@;
+
+#
+# $Id: perg,v 1.3 1995/12/18 23:22:12 kehr Exp kehr $
+#
+# $Log: perg,v $
+# Revision 1.3  1995/12/18  23:22:12  kehr
+# Gave it a funny name ;-)
+#
+# Revision 1.2  1995/12/18  23:18:02  kehr
+# Made inner part evaled program.
+#
+# Revision 1.1  1995/12/18  23:05:50  kehr
+# Initial revision
+#
+#
+

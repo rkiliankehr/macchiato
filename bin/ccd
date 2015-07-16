@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# Custom Change Directory
+#
+# Purpose: Quickly change directories on commandline by typing in the directory name without the full path.
+#
+# Examples:
+#   $ ccd my_project
+#   $ ccd -n
+#   $ ccd -f my_project
+#
+#
+# Approach:
+#   1. Save this file as $HOME/bin/ccd.
+#   2. Add the following to your $HOME/.bashrc:
+#           function ccd() {
+#               source $HOME/bin/ccd "$@"
+#           }
+#   3. Relogin to parse your $HOME/.bashrc.
+#   2. Create a directory cache with 'ccd -n". A new cache file is $HOME/.ccd.
+#   4. Change directory with 'ccd my_directory'.
+#   5. From time to time regenerate your cache or run a cronjob for this.
+#
+
+CCD="$HOME/.ccd"
+
+function usage() {
+	echo usage
+	cat <<EOT
+Synopsis: ccd [-n | -f <pat> | <pat>]
+
+  ccd -n      (re)creates the change for all directories in $HOME
+  ccd -f pat  show all potential directories for pattern 'pat'
+  ccd pat     change directory to the first hit in the list found by 'ccd -f'
+  
+EOT
+	exit 1
+}
+
+function ccd_new() {
+	#echo "Rebuilding CCD cache..."
+	(
+	cd $HOME
+	find . -type d 2>/dev/null | 					# find directories only
+	egrep -v "/\." |					# ignore . directories 
+	egrep -v "node_modules" |			# ignore node directories 
+	egrep -v "Microsoft User Data" |	# ignore Office folders
+	egrep -v "Album Artwork" |			# ignore iTunes stuff
+	egrep -v "iPhoto Library" |			# ignore iPhoto stuff
+	egrep -v "^./Library" |				# ignore Library 
+	egrep -v ".git/objects" |			# ignore git object folders 
+	awk '{ printf "%4d:%s\n", length($0), $0}' | 
+	sort -n | 
+	cut -d ':' -f 2 > $CCD.$$
+	mv $CCD.$$ $CCD						# atomic move in case of parallel rebuilds
+	#echo "Done."
+	wc $CCD
+	)
+}
+
+function ccd_find() {
+	NEWCCDCACHE=$(find $CCD -mtime +5d | wc -l)
+	if [ "NEWCCDCACHE" == "1" ]
+	then
+		echo "CCD is older than one week."
+		echo "Consider running 'ccd -n'."
+	fi
+	egrep -i "$1[^\/]*\$" $HOME/.ccd
+}
+
+args=`getopt nf: $*`
+set -- $args
+
+for i; do
+  case "$i" in
+		-n) ccd_new
+			break 
+			;;
+		-f) PAT="$2"
+			ccd_find "$PAT"
+			break
+			;;
+		*)  PAT="$2"
+			if [ "$PAT" == "" ]
+			then
+				usage
+			fi
+			HIT=$(ccd_find "$PAT" | head -1)
+			if [ "$HIT" != "" ]
+			then 
+				cd
+				cd $HIT
+				#echo "cd $(pwd)"
+			else
+				echo "No match found for '$PAT'."
+			fi
+			break
+			;;
+  esac
+done

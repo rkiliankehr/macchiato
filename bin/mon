@@ -1,0 +1,10 @@
+#!/bin/bash
+
+while true
+do
+	tput clear
+	date
+	echo "---"
+	"$@"
+	sleep 2
+done
